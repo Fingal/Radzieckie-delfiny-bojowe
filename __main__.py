@@ -1,6 +1,6 @@
 __author__ = 'Andrzej'
 import pygame
-import pygame.locals
+from pygame.locals import *
 import configparser
 
 
@@ -26,7 +26,7 @@ class TileCache:
 
     def _load_tile_table(self, filename, width, height):
         """ładuje obrazek i dzieli go na płytki."""
-        image = pygame.image.load(filename).convert()
+        image = pygame.image.load(filename).convert_alpha()
         image_width, image_height = image.get_size()
         tile_table = []
         for tile_x in range(0, int(image_width/width)):
@@ -36,7 +36,8 @@ class TileCache:
                 rect = (tile_x*width, tile_y*height, width, height)
                 line.append(image.subsurface(rect))
         return tile_table
-
+DX=[0, 1, 0, -1]
+DY=[-1, 0, 1, 0]
 MAP_TILE_WIDTH = 24
 MAP_TILE_HEIGHT = 16
 MAP_CACHE = TileCache(24, 16)
@@ -150,8 +151,8 @@ class Level(object):
                            (map_x*MAP_TILE_WIDTH, map_y*MAP_TILE_HEIGHT))
         return image, overlays
 
-
 class Sprite(pygame.sprite.Sprite):
+    is_player = False
     def __init__(self, pos=(0, 0), frames=None):
         super(Sprite, self).__init__()
         self.frames = frames
@@ -189,39 +190,104 @@ class Sprite(pygame.sprite.Sprite):
         self.rect.move_ip(dx, dy)
         self.depth = self.rect.midbottom[1]
 
+
+class Player(Sprite):
+    is_player = True
+
+    def __init__(self, pos=(0, 0)):
+        Sprite.__init__(self, pos, TileCache()["player.png"])
+        self.direction = 2
+        self.image = self.frames[self.direction][0]
+        self.animation = None
+    def walk_animation(self):
+        for frame in range(4):
+            self.image = self.frames[self.direction][frame % 2]
+            yield None
+            self.move(3*DX[self.direction],2*DY[self.direction])
+            self.move(3*DX[self.direction],2*DY[self.direction])
+
+
+    def update(self, *args):
+        if self.animation == None:
+            self.image=self.frames[self.direction][0]
+        else:
+            try:
+                self.animation.__next__()
+            except StopIteration:
+                self.animation = None
+class SortedUpdates(pygame.sprite.RenderUpdates):
+
+    def sprites(self):
+
+        return sorted(self.spritedict.keys(), key=lambda sprite: sprite.depth)
+
+
+
+class Game:
+    def __init__(self):
+        self.level = Level()
+        self.level.load_file('level.map')
+        self.width = MAP_TILE_WIDTH*self.level.width
+        self.height = MAP_TILE_HEIGHT*self.level.height
+        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.load_sprite()
+        self.clock=pygame.time.Clock()
+        self.load_level()
+        self.game_over=False
+        self.pressed_key=None
+    def load_sprite(self):
+        sprite_cahe = TileCache(32, 32)
+        self.sprites = SortedUpdates()
+        for pos, tile in self.level.items.items():
+            if tile.get("player") in ('true', '1', 'yes', 'on'):
+                sprite = Player(pos)
+                self.player = sprite
+            else:
+                sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
+            self.sprites.add(sprite)
+    def load_level(self):
+        self.background, overlay_dict = self.level.render()
+        self.overlays = pygame.sprite.RenderUpdates()
+        for (x, y), image in overlay_dict.items():
+            overlay = pygame.sprite.Sprite(self.overlays)
+            overlay.image = image
+            overlay.rect = image.get_rect().move(x * 24, y * 16 - 16)
+        self.screen.blit(self.background, (0, 0))
+        self.overlays.draw(self.screen)
+        pygame.display.flip()
+    def walk(self,d):
+        self.player.direction = d
+        x,y = self.player.pos
+        if not self.level.is_blocking(int(x+DX[d]), int(y+DY[d])):
+            self.player.animation = self.player.walk_animation()
+    def control(self):
+        if(self.pressed_key == K_w):
+            self.walk(0)
+        elif(self.pressed_key == K_d):
+            self.walk(1)
+        elif(self.pressed_key == K_s):
+            self.walk(2)
+        elif(self.pressed_key == K_a):
+            self.walk(3)
+        self.pressed_key=None
+
+
+    def game_loop(self):
+        while not self.game_over:
+            self.control()
+            self.sprites.clear(self.screen, self.background)
+            dirty = self.sprites.draw(self.screen)
+            self.sprites.update()
+            self.overlays.draw(self.screen)
+            pygame.display.update(dirty)
+            dirty = self.overlays.draw(self.screen)
+            pygame.display.update(dirty)
+            self.clock.tick(15)
+            for event in pygame.event.get():
+                if event.type == pygame.locals.QUIT:
+                    self.game_over = True
+                elif event.type == pygame.locals.KEYDOWN and self.player.animation == None:
+                    self.pressed_key = event.key
 if __name__=='__main__':
-    screen = pygame.display.set_mode((424, 320))
-    level = Level()
-    level.load_file('level.map')
-    SPRITE_CACHE = TileCache(32, 32)
-    sprites = pygame.sprite.RenderUpdates()
-    for pos, tile in sorted(list(level.items.items()), key=lambda tup: tup[0][0]):
-        sprite = Sprite(pos, SPRITE_CACHE[tile["sprite"]])
-        sprites.add(sprite)
-
-    clock = pygame.time.Clock()
-
-    background, overlay_dict = level.render()
-    overlays = pygame.sprite.RenderUpdates()
-    for (x, y), image in overlay_dict.items():
-        overlay = pygame.sprite.Sprite(overlays)
-        overlay.image = image
-        overlay.rect = image.get_rect().move(x * 24, y * 16 - 16)
-    screen.blit(background, (0, 0))
-    overlays.draw(screen)
-    pygame.display.flip()
-    game_over = False
-    while not game_over:
-        sprites.clear(screen, background)
-        dirty = sprites.draw(screen)
-        sprites.update()
-        overlays.draw(screen)
-        pygame.display.update(dirty)
-        dirty = overlays.draw(screen)
-        pygame.display.update(dirty)
-        clock.tick(15)
-        for event in pygame.event.get():
-            if event.type == pygame.locals.QUIT:
-                game_over = True
-            elif event.type == pygame.locals.KEYDOWN:
-                pressed_key = event.key
+    game = Game()
+    game.game_loop()
