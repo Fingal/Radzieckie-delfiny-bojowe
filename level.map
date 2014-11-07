@@ -1,6 +1,6 @@
 [level]
 tileset = ground.png
-map = p...................
+map = p.......d...........
       .#####.##..#####.##.
       .#b#b#..#..#c#c#..#.
       .#..b####..#...#..#.
@@ -27,6 +27,11 @@ name = crate
 tile = 0, 3
 block = true
 sprite = crate.png
+[d]
+name = test
+tile = 0, 3
+block = true
+sprite = delfin.png
 [p]
 name = player
 tile = 0, 3
