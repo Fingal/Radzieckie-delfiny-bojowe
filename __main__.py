@@ -58,7 +58,7 @@ class Level(object):
         self.items = {}
         for y, line in enumerate(self.map):
             for x, c in enumerate(line):
-                if not self.is_wall(x, y) and 'sprite' in self.key[c]:
+                if( not self.is_wall(x, y) and 'sprite' in self.key[c]) or 'special' in self.key[c]:
                     self.items[(x, y)] = self.key[c]
 
     def get_tile(self, x, y):
@@ -222,6 +222,20 @@ class SortedUpdates(pygame.sprite.RenderUpdates):
         return sorted(self.spritedict.keys(), key=lambda sprite: sprite.depth)
 
 
+class Button(Sprite):
+    def __init__(self, pos=(0, 0)):
+        pos = (pos[0],pos[1]+1)
+        Sprite.__init__(self, pos, TileCache()["button.png"])
+        self.image = self.frames[0][0]
+        self.status=0;
+        self.animation = None
+    def touch(self):
+        self.status=(self.status+1)%2
+        self.image = self.frames[0][self.status]
+    def update(self, *args):
+        self.animation=None
+
+
 
 class Game:
     def __init__(self):
@@ -230,6 +244,7 @@ class Game:
         self.width = MAP_TILE_WIDTH*self.level.width
         self.height = MAP_TILE_HEIGHT*self.level.height
         self.screen = pygame.display.set_mode((self.width, self.height))
+        self.special={}
         self.load_sprite()
         self.clock=pygame.time.Clock()
         self.load_level()
@@ -242,9 +257,14 @@ class Game:
             if tile.get("player") in ('true', '1', 'yes', 'on'):
                 sprite = Player(pos)
                 self.player = sprite
+            elif tile['sprite'] in ('button',"button"," button"):
+                sprite = Button(pos)
+                self.special[pos] = sprite
             else:
                 sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
             self.sprites.add(sprite)
+        print (self.special.keys())
+
     def load_level(self):
         self.background, overlay_dict = self.level.render()
         self.overlays = pygame.sprite.RenderUpdates()
@@ -255,22 +275,31 @@ class Game:
         self.screen.blit(self.background, (0, 0))
         self.overlays.draw(self.screen)
         pygame.display.flip()
-    def walk(self,d):
+
+    def walk(self, d):
         self.player.direction = d
         x,y = self.player.pos
         if not self.level.is_blocking(int(x+DX[d]), int(y+DY[d])):
             self.player.animation = self.player.walk_animation()
+
+    def action(self):
+        x, y = self.player.pos[0]+DX[self.player.direction],self.player.pos[1]+DY[self.player.direction]
+        print (x,y)
+        if (x,y) in self.special.keys():
+            self.special[(x, y)].touch()
+
     def control(self):
-        if(self.pressed_key == K_w):
+        if self.pressed_key == K_e:
+            self.action()
+        if self.pressed_key == K_w:
             self.walk(0)
-        elif(self.pressed_key == K_d):
+        elif self.pressed_key == K_d:
             self.walk(1)
-        elif(self.pressed_key == K_s):
+        elif self.pressed_key == K_s:
             self.walk(2)
-        elif(self.pressed_key == K_a):
+        elif self.pressed_key == K_a:
             self.walk(3)
         self.pressed_key=None
-
 
     def game_loop(self):
         while not self.game_over:

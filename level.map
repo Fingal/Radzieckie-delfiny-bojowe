@@ -2,22 +2,28 @@
 tileset = ground.png
 map = p.......d...........
       .#####.##..#####.##.
-      .#b#b#..#..#c#c#..#.
-      .#..b####..#...#..#.
-      .##.##.b#..##b#.....
-      ........#........b..
-	  .#......##########..
+      .#s#s#..#..#c#c#..#.
+      .#..s####..#...#..#.
+      .b#.##.s#..##s#.....
+      ........#........s..
+	  .#......########bb..
 	  .########...........
 
 [.]
 name = floor
 tile = 0, 3
 
+[b]
+name = wall
+wall = true
+special = true	
+sprite = button
+block = true
 [#]
 name = wall
 wall = true
 block = true
-[b]
+[s]
 name = skeleton
 tile = 0, 3
 block = true
