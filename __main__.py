@@ -243,7 +243,7 @@ class Door(Sprite):
         self.status=0
         self.animation = None
     def touch(self):
-        print ("aaaa")
+        #print ("aaaa")
         self.status=(self.status+1)%2
         self.image = self.frames[0][self.status]
     def update(self, *args):
@@ -309,9 +309,8 @@ class Game:
 
     def action(self):
         x, y = self.player.pos[0]+DX[self.player.direction],self.player.pos[1]+DY[self.player.direction]
-        print (x,y)
+        #print (x,y)
         if (x,y) in self.special.keys():
-            number=0
             for i in self.special[(x, y)]:
                 i.touch();
 
