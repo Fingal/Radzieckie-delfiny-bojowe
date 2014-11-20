@@ -4,7 +4,7 @@ map = p.......d...........
       .#####.##..#####.##.
       .#s#s#..#..#c#c#..#.
       .#..s####..#...#..#.
-      .b#.##.s#..##s#.....
+      .b#.##.s#..##d#.....
       ........#........s..
 	  .#......########bb..
 	  .########...........
@@ -18,6 +18,12 @@ name = wall
 wall = true
 special = true	
 sprite = button
+block = true
+[d]
+name = door
+special = true	
+sprite = door
+open = 1,4
 block = true
 [#]
 name = wall
@@ -33,11 +39,6 @@ name = crate
 tile = 0, 3
 block = true
 sprite = crate.png
-[d]
-name = test
-tile = 0, 3
-block = true
-sprite = delfin.png
 [p]
 name = player
 tile = 0, 3

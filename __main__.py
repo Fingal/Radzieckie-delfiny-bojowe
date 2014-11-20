@@ -236,6 +236,20 @@ class Button(Sprite):
         self.animation=None
 
 
+class Door(Sprite):
+    def __init__(self, pos=(0, 0)):
+        Sprite.__init__(self, pos, TileCache()["doors.png"])
+        self.image = self.frames[0][0]
+        self.status=0
+        self.animation = None
+    def touch(self):
+        print ("aaaa")
+        self.status=(self.status+1)%2
+        self.image = self.frames[0][self.status]
+    def update(self, *args):
+        self.animation=None
+
+
 
 class Game:
     def __init__(self):
@@ -257,9 +271,20 @@ class Game:
             if tile.get("player") in ('true', '1', 'yes', 'on'):
                 sprite = Player(pos)
                 self.player = sprite
-            elif tile['sprite'] in ('button',"button"," button"):
+            elif tile['sprite'] in ('button'):
                 sprite = Button(pos)
-                self.special[pos] = sprite
+                if not pos in self.special.keys():
+                    self.special[pos]=[]
+                self.special[pos].append(sprite)
+            elif tile['sprite'] in ('door'):
+                sprite = Door(pos)
+                poses=[]
+                for i in tile['open'].split():
+                    poses.append(tuple([int(s) for s in i.split(",") if s.isdigit()]))
+                for i in poses:
+                    if not i in self.special.keys():
+                        self.special[i] = []
+                    self.special[i].append(sprite)
             else:
                 sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
             self.sprites.add(sprite)
@@ -286,7 +311,10 @@ class Game:
         x, y = self.player.pos[0]+DX[self.player.direction],self.player.pos[1]+DY[self.player.direction]
         print (x,y)
         if (x,y) in self.special.keys():
-            self.special[(x, y)].touch()
+            number=0
+            for i in self.special[(x, y)]:
+                i.touch();
+
 
     def control(self):
         if self.pressed_key == K_e:

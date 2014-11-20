@@ -1,0 +1,6 @@
+# your code goes 
+string="10,2 2,3 4,3"
+list=[]
+for i in string.split():
+	list.append([int(s) for s in i.split(",") if s.isdigit()])
+print (list)
