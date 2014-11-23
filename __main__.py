@@ -63,6 +63,7 @@ class Level(object):
 
     def get_tile(self, x, y):
         try:
+
             char = self.map[y][x]
         except IndexError:
             return {}
@@ -73,7 +74,7 @@ class Level(object):
 
     def get_tile(self, x, y):
         """zwraca co jest w danej pozycji na mapie."""
-
+        x,y = int(x), int(y)
         try:
             char = self.map[y][x]
         except IndexError:
@@ -82,6 +83,7 @@ class Level(object):
             return self.key[char]
         except KeyError:
             return {}
+
 
     def get_bool(self, x, y, name):
         """sprawdza czy dana pozycja zawiera flagę name."""
@@ -224,12 +226,12 @@ class SortedUpdates(pygame.sprite.RenderUpdates):
 
 class Button(Sprite):
     def __init__(self, pos=(0, 0)):
-        pos = (pos[0],pos[1]+1)
+        pos = (pos[0],pos[1])
         Sprite.__init__(self, pos, TileCache()["button.png"])
         self.image = self.frames[0][0]
         self.status=0;
         self.animation = None
-    def touch(self):
+    def touch(self,level):
         self.status=(self.status+1)%2
         self.image = self.frames[0][self.status]
     def update(self, *args):
@@ -242,12 +244,14 @@ class Door(Sprite):
         self.image = self.frames[0][0]
         self.status=0
         self.animation = None
-    def touch(self):
+    def touch(self,level):
         #print ("aaaa")
         self.status=(self.status+1)%2
         self.image = self.frames[0][self.status]
+        level.get_tile(self.pos[0],self.pos[1])["block"] = str(1 - self.status)
     def update(self, *args):
         self.animation=None
+
 
 
 
@@ -312,7 +316,7 @@ class Game:
         #print (x,y)
         if (x,y) in self.special.keys():
             for i in self.special[(x, y)]:
-                i.touch();
+                i.touch(self.level);
 
 
     def control(self):
