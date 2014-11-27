@@ -1,5 +1,7 @@
 __author__ = 'Andrzej'
 import pygame
+import collections
+from inputbox import Inputbox
 from pygame.locals import *
 import configparser
 
@@ -261,13 +263,15 @@ class Game:
         self.level.load_file('level.map')
         self.width = MAP_TILE_WIDTH*self.level.width
         self.height = MAP_TILE_HEIGHT*self.level.height
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.screen = pygame.display.set_mode((self.width, self.height+160))
         self.special={}
         self.load_sprite()
         self.clock=pygame.time.Clock()
         self.load_level()
         self.game_over=False
         self.pressed_key=None
+        self.inputbox=Inputbox(40,self.screen)
+        self.waiting=True
     def load_sprite(self):
         sprite_cahe = TileCache(32, 32)
         self.sprites = SortedUpdates()
@@ -342,12 +346,25 @@ class Game:
             pygame.display.update(dirty)
             dirty = self.overlays.draw(self.screen)
             pygame.display.update(dirty)
-            self.clock.tick(15)
-            for event in pygame.event.get():
-                if event.type == pygame.locals.QUIT:
-                    self.game_over = True
-                elif event.type == pygame.locals.KEYDOWN and self.player.animation == None:
-                    self.pressed_key = event.key
+            self.clock.tick(20)
+            if self.waiting:
+                comands=self.inputbox.main()
+                self.waiting=False
+
+            """if self.pressed_key==None or not pygame.key.get_pressed[self.pressed_key]==0:
+                for event in pygame.event.get():
+                    if event.type == pygame.locals.QUIT:
+                        self.game_over = True
+                    elif event.type == pygame.locals.KEYDOWN and self.player.animation == None:
+                        self.pressed_key = event.key"""
+            if len(comands)>0:
+                comand=collections.deque(comands)
+                print(len(comands))
+                if comand == "d":
+                    self.pressed_key=K_d
+                    self.action()
+            if len(comands)==0:
+                self.waiting=True
 if __name__=='__main__':
     game = Game()
     game.game_loop()
