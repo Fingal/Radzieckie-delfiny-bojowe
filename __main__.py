@@ -224,7 +224,7 @@ class Player(Sprite):
 
     def __init__(self, pos=(0, 0)):
         Sprite.__init__(self, pos, TileCache()["player.png"])
-        self.direction = 2
+        self.direction = 0
         self.image = self.frames[self.direction][0]
         self.animation = None
     def walk_animation(self):
@@ -252,7 +252,7 @@ class Player(Sprite):
         self.visible={}
         set={self.pos}
 
-        for a, b in vectors(2/3*math.pi,50,3):
+        for a, b in vectors((2/3)*math.pi,24,self.direction-1):
             line=Line(self.pos,a,b)
             point=line.next()
             while not level.is_blocking(point[0],point[1]):
@@ -376,7 +376,7 @@ class Game:
             self.sprites.add(sprite)
         print (self.special.keys())
         for i in self.player.vision(self.level):
-            self.sprites.add(Sprite(i,sprite_cahe["skeleton.png"]))
+            self.sprites.add(Sprite(i,sprite_cahe["black.png"]))
 
     def load_level(self):
         self.background, overlay_dict = self.level.render()
