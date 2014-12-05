@@ -1,11 +1,11 @@
 [level]
 tileset = ground.png
-map = p.......d...........
+map = ........d...........
       .#####.##..#####.##.
       .#s#s#..#..#c#c#..#.
       .#..s####..#...#..#.
-      .b#.##.s#..##d#.....
-      ........#........s..
+      .b#.##.s#.p##d#.....
+      ...c....#........s..
 	  .#......########bb..
 	  .########...........
 
@@ -16,12 +16,12 @@ tile = 0, 3
 [b]
 name = wall
 wall = true
-special = true	
+special = button	
 sprite = button
 block = true
 [d]
 name = door
-special = true	
+special = door	
 sprite = door
 open = 1,4
 block = true
@@ -36,8 +36,10 @@ block = true
 sprite = skeleton.png
 [c]
 name = crate
+weight=100
 tile = 0, 3
 block = true
+special=item
 sprite = crate.png
 [p]
 name = player

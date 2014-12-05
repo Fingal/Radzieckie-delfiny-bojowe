@@ -2,8 +2,29 @@ __author__ = 'Andrzej'
 import pygame
 from pygame.locals import *
 import configparser
-
-
+from line import *
+def neigbours(pos):
+    x,y = pos
+    return {(x,y-1),(x-1,y),(x+1,y),(x,y+1)}
+class Graph:
+    def __init__(self,points):
+        self.graph={}
+        for point in points:
+            self.graph[point]=points & neigbours(point)
+    def find_shortest_path(self, start, end, path=[]):
+       path = path + [start]
+       if start == end:
+           return path
+       if not self.graph.has_key(start):
+           return None
+       shortest = None
+       for node in self.graph[start]:
+           if node not in path:
+               newpath = self.find_shortest_path(node, end, path)
+               if newpath:
+                   if not shortest or len(newpath) < len(shortest):
+                       shortest = newpath
+       return shortest
 class TileCache:
     """ładuje zestaw płytek"""
 
@@ -61,16 +82,15 @@ class Level(object):
                 if( not self.is_wall(x, y) and 'sprite' in self.key[c]) or 'special' in self.key[c]:
                     self.items[(x, y)] = self.key[c]
 
-    def get_tile(self, x, y):
-        try:
-
-            char = self.map[y][x]
-        except IndexError:
-            return {}
-        try:
-            return self.key[char]
-        except KeyError:
-            return {}
+    def front(pos,direction):
+        return int(pos[0]+DX[direction]),int(pos[1]+DY[direction])
+    front=staticmethod(front)
+    def set_tile(self, x, y,char):
+        if char in self.key.keys():
+            try:
+                self.map[y]=self.map[y][:x]+char+self.map[y][x+1:]
+            except IndexError:
+                return {}
 
     def get_tile(self, x, y):
         """zwraca co jest w danej pozycji na mapie."""
@@ -84,6 +104,13 @@ class Level(object):
         except KeyError:
             return {}
 
+    def get_tile_name(self, x, y):
+        """zwraca co jest w danej pozycji na mapie."""
+        x,y = int(x), int(y)
+        try:
+            return self.map[y][x]
+        except IndexError:
+            return ''
 
     def get_bool(self, x, y, name):
         """sprawdza czy dana pozycja zawiera flagę name."""
@@ -162,7 +189,6 @@ class Sprite(pygame.sprite.Sprite):
         self.image = frames[0][0]
         self.rect = self.image.get_rect()
         self.pos = pos
-
     def stand_animation(self):
         while True:
             for frame in self.frames[0]:
@@ -207,7 +233,11 @@ class Player(Sprite):
             yield None
             self.move(3*DX[self.direction],2*DY[self.direction])
             self.move(3*DX[self.direction],2*DY[self.direction])
-
+    def turn(self,d):
+        self.direction=d
+        self.image=self.frames[self.direction][0]
+    def front(self):
+        return Level.front(self.pos,self.direction)
 
     def update(self, *args):
         if self.animation == None:
@@ -217,6 +247,32 @@ class Player(Sprite):
                 self.animation.__next__()
             except StopIteration:
                 self.animation = None
+
+    def vision(self,level):
+        self.visible={}
+        set={self.pos}
+
+        for a, b in vectors(2/3*math.pi,50,3):
+            line=Line(self.pos,a,b)
+            point=line.next()
+            while not level.is_blocking(point[0],point[1]):
+                set.add(point)
+                point=line.next()
+                if level.get_tile(point[0],point[1])['name']!='floor':
+                    try:
+                        self.visible[level.get_tile(point[0],point[1])['name']].add(point)
+                    except KeyError:
+                        self.visible[level.get_tile(point[0],point[1])['name']]={point}
+        print (self.visible)
+        self.movable=set
+        self.graph=Graph(self.movable)
+        return set
+    def go_to(self,point):
+        if not point in self.movable:
+            raise IndexError
+        return self.graph.find_shortest_path(self.pos,point)
+
+
 class SortedUpdates(pygame.sprite.RenderUpdates):
 
     def sprites(self):
@@ -238,6 +294,19 @@ class Button(Sprite):
         self.animation=None
 
 
+class Item():
+    def __init__(self,name,weight,sprite,type):
+        self.name=name
+        self.weight=weight
+        self.sprite=sprite
+        self.type=type
+    def pick(self):
+        self.sprite._set_pos((10000,10000))
+    def drop(self,pos):
+        self.sprite._set_pos(pos)
+
+
+
 class Door(Sprite):
     def __init__(self, pos=(0, 0)):
         Sprite.__init__(self, pos, TileCache()["doors.png"])
@@ -254,9 +323,9 @@ class Door(Sprite):
 
 
 
-
 class Game:
     def __init__(self):
+        self.items={}
         self.level = Level()
         self.level.load_file('level.map')
         self.width = MAP_TILE_WIDTH*self.level.width
@@ -268,6 +337,13 @@ class Game:
         self.load_level()
         self.game_over=False
         self.pressed_key=None
+        self.status={
+            "hp": 100,
+            "inventory": [],
+            "keys": [],
+            "weight": 0,
+            "max_weight": 200
+        }
     def load_sprite(self):
         sprite_cahe = TileCache(32, 32)
         self.sprites = SortedUpdates()
@@ -275,24 +351,32 @@ class Game:
             if tile.get("player") in ('true', '1', 'yes', 'on'):
                 sprite = Player(pos)
                 self.player = sprite
-            elif tile['sprite'] in ('button'):
-                sprite = Button(pos)
-                if not pos in self.special.keys():
-                    self.special[pos]=[]
-                self.special[pos].append(sprite)
-            elif tile['sprite'] in ('door'):
-                sprite = Door(pos)
-                poses=[]
-                for i in tile['open'].split():
-                    poses.append(tuple([int(s) for s in i.split(",") if s.isdigit()]))
-                for i in poses:
-                    if not i in self.special.keys():
-                        self.special[i] = []
-                    self.special[i].append(sprite)
+            elif "special" in tile.keys():
+                print (tile['special'])
+                if tile['special'] in ('button'):
+                    sprite = Button(pos)
+                    if not pos in self.special.keys():
+                        self.special[pos]=[]
+                    self.special[pos].append(sprite)
+                elif tile['special'] in ('door'):
+                    sprite = Door(pos)
+                    poses=[]
+                    for i in tile['open'].split():
+                        poses.append(tuple([int(s) for s in i.split(",") if s.isdigit()]))
+                    for i in poses:
+                        if not i in self.special.keys():
+                            self.special[i] = []
+                        self.special[i].append(sprite)
+                elif tile['special'] in ('item'):
+                    sprite=Sprite(pos,sprite_cahe[tile["sprite"]])
+                    self.items[pos]=Item(tile["name"],tile['weight'],sprite,self.level.get_tile_name(pos[0],pos[1]))
             else:
+                print (pos)
                 sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
             self.sprites.add(sprite)
         print (self.special.keys())
+        for i in self.player.vision(self.level):
+            self.sprites.add(Sprite(i,sprite_cahe["skeleton.png"]))
 
     def load_level(self):
         self.background, overlay_dict = self.level.render()
@@ -306,22 +390,43 @@ class Game:
         pygame.display.flip()
 
     def walk(self, d):
-        self.player.direction = d
-        x,y = self.player.pos
-        if not self.level.is_blocking(int(x+DX[d]), int(y+DY[d])):
-            self.player.animation = self.player.walk_animation()
+        if self.player.direction!=d:
+            self.player.turn(d)
+        else:
+            x,y = self.player.pos
+            if not self.level.is_blocking(int(x+DX[d]), int(y+DY[d])):
+                self.player.animation = self.player.walk_animation()
 
     def action(self):
-        x, y = self.player.pos[0]+DX[self.player.direction],self.player.pos[1]+DY[self.player.direction]
+        x, y = self.player.front()
         #print (x,y)
         if (x,y) in self.special.keys():
             for i in self.special[(x, y)]:
-                i.touch(self.level);
+                i.touch(self.level)
+        if (x,y) in self.items.keys():
+            self.items[(x,y)].pick()
+            self.status["inventory"].append(self.items.pop((x,y)))
+            self.level.set_tile(x,y,".")
+            #print ("\n".join(self.level.map))
+
+    def drop(self):
+        if len(self.status["inventory"])>0:
+            x, y = self.player.front()
+            if not self.level.is_blocking(x,y):
+                droped=self.status["inventory"].pop(0)
+                self.items[(x,y)]=droped
+                droped.drop((x,y))
+                self.level.set_tile(x,y,droped.type)
+                #print ("\n".join(self.level.map))
 
 
     def control(self):
         if self.pressed_key == K_e:
             self.action()
+        if self.pressed_key == K_i:
+            print (list(map(lambda i: i.name, self.status["inventory"])))
+        if self.pressed_key == K_r:
+            self.drop()
         if self.pressed_key == K_w:
             self.walk(0)
         elif self.pressed_key == K_d:
