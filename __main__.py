@@ -12,7 +12,7 @@ def neigbours(pos):
     x,y = pos
     return {(x,y-1),(x-1,y),(x+1,y),(x,y+1)}
 def d(a,b):
-    return list(zip(DX,DY)).index(sup(a,b))
+    return list(zip(DX,DY)).index(sup(b,a))
 
 class Graph:
     def __init__(self,points):
@@ -307,10 +307,30 @@ class Player(Sprite):
         paths=[]
         for pos in self.visible[name]:
             for point in (neigbours(pos) & self.movable):
-                paths.append(self.graph.find_shortest_path(self.pos,point))
-        paths = [x for x in paths if x is not None]
-        print(paths)
-        return min(paths,key=len)
+                paths.append(self.graph.find_shortest_path(self.pos,point)+[pos])
+        paths = [x for x in paths if len(x)>1]
+        #print(paths)
+        return (min(paths,key=len))
+
+    def comand_go(self,path):
+        moves=[]
+        if len(path)>1:
+            for start, end in zip(path[:-1],path[1:]):
+                moves+=[d(start,end)]
+                if len(moves)>=2 and moves[-1]!=moves[-2]:
+                    moves+=moves[-1]
+        return moves
+    def use(self,do,what,which='closest'):
+        if which=='closest':
+            path=self.go_closest(what)
+        else:
+            path=[]
+        moves=self.comand_go(path[:-1])
+        direction=d(path[-2],path[-1])
+        if direction!=moves[-1]:
+            moves.append(direction)
+        moves.append('u')
+        return moves
 
 class SortedUpdates(pygame.sprite.RenderUpdates):
 
@@ -465,9 +485,11 @@ class Game:
         elif self.pressed_key == K_a:
             self.player.walk(3,self.level)
         elif self.pressed_key == K_g:
-            print (self.player.go_closest('crate'))
+            print(self.player.go_closest('crate'))
+            print(self.player.comand_go(self.player.go_closest('crate'))[:-1])
+            print(self.player.use('pick','crate'))
         elif self.pressed_key == K_v:
-            print (self.player.movable)
+            print(self.player.movable)
         self.pressed_key=None
 
     def game_loop(self):
