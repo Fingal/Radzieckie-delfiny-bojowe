@@ -3,9 +3,17 @@ import pygame
 from pygame.locals import *
 import configparser
 from line import *
+
+
+def sup(a,b):
+    return tuple(map(lambda x,y: x-y,a,b))
+
 def neigbours(pos):
     x,y = pos
     return {(x,y-1),(x-1,y),(x+1,y),(x,y+1)}
+def d(a,b):
+    return list(zip(DX,DY)).index(sup(a,b))
+
 class Graph:
     def __init__(self,points):
         self.graph={}
@@ -15,7 +23,7 @@ class Graph:
        path = path + [start]
        if start == end:
            return path
-       if not self.graph.has_key(start):
+       if  start not in self.graph:
            return None
        shortest = None
        for node in self.graph[start]:
@@ -95,6 +103,9 @@ class Level(object):
     def get_tile(self, x, y):
         """zwraca co jest w danej pozycji na mapie."""
         x,y = int(x), int(y)
+        if x<0 or y<0 or x>=len(self.map[0]) or y>=len(self.map):
+            return self.key['#']
+
         try:
             char = self.map[y][x]
         except IndexError:
@@ -103,7 +114,6 @@ class Level(object):
             return self.key[char]
         except KeyError:
             return {}
-
     def get_tile_name(self, x, y):
         """zwraca co jest w danej pozycji na mapie."""
         x,y = int(x), int(y)
@@ -119,9 +129,10 @@ class Level(object):
         return value in (True, 1, 'true', 'yes', 'True', 'Yes', '1', 'on', 'On')
 
     def is_wall(self, x, y):
-        """czy jest mur?"""
-
-        return self.get_bool(x, y, 'wall')
+        try:
+            return self.get_tile(x,y)["wall"] in (True, 1, 'true', 'yes', 'True', 'Yes', '1', 'on', 'On')
+        except KeyError:
+            return False
 
     def is_blocking(self, x, y):
         """czy blokuje ruch?"""
@@ -227,15 +238,24 @@ class Player(Sprite):
         self.direction = 0
         self.image = self.frames[self.direction][0]
         self.animation = None
+    def walk(self, d,level):
+        if self.direction!=d:
+            self.turn(d)
+        else:
+            x,y = self.pos
+            if not level.is_blocking(int(x+DX[d]), int(y+DY[d])):
+                self.animation = self.walk_animation()
     def walk_animation(self):
         for frame in range(4):
             self.image = self.frames[self.direction][frame % 2]
             yield None
             self.move(3*DX[self.direction],2*DY[self.direction])
             self.move(3*DX[self.direction],2*DY[self.direction])
+
     def turn(self,d):
         self.direction=d
         self.image=self.frames[self.direction][0]
+
     def front(self):
         return Level.front(self.pos,self.direction)
 
@@ -255,23 +275,42 @@ class Player(Sprite):
         for a, b in vectors((2/3)*math.pi,24,self.direction-1):
             line=Line(self.pos,a,b)
             point=line.next()
-            while not level.is_blocking(point[0],point[1]):
-                set.add(point)
-                point=line.next()
-                if level.get_tile(point[0],point[1])['name']!='floor':
+            if level.get_tile(point[0],point[1])['name']!='floor':
                     try:
                         self.visible[level.get_tile(point[0],point[1])['name']].add(point)
                     except KeyError:
                         self.visible[level.get_tile(point[0],point[1])['name']]={point}
-        print (self.visible)
+
+            while not level.is_blocking(point[0],point[1]):
+                set.add(point)
+                point=line.next()
+                try:
+                    if level.get_tile(point[0],point[1])['name']!='floor':
+                        try:
+                            self.visible[level.get_tile(point[0],point[1])['name']].add(point)
+                        except KeyError:
+                            self.visible[level.get_tile(point[0],point[1])['name']]={point}
+                except KeyError:
+                    print(level.get_tile(point[0],point[1]))
+        #print(self.visible)
         self.movable=set
         self.graph=Graph(self.movable)
-        return set
+
     def go_to(self,point):
-        if not point in self.movable:
+        if point not in self.movable:
             raise IndexError
         return self.graph.find_shortest_path(self.pos,point)
 
+    def go_closest(self,name):
+        if name not in self.visible.keys():
+            raise IndexError
+        paths=[]
+        for pos in self.visible[name]:
+            for point in (neigbours(pos) & self.movable):
+                paths.append(self.graph.find_shortest_path(self.pos,point))
+        paths = [x for x in paths if x is not None]
+        print(paths)
+        return min(paths,key=len)
 
 class SortedUpdates(pygame.sprite.RenderUpdates):
 
@@ -375,8 +414,6 @@ class Game:
                 sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
             self.sprites.add(sprite)
         print (self.special.keys())
-        for i in self.player.vision(self.level):
-            self.sprites.add(Sprite(i,sprite_cahe["black.png"]))
 
     def load_level(self):
         self.background, overlay_dict = self.level.render()
@@ -388,14 +425,6 @@ class Game:
         self.screen.blit(self.background, (0, 0))
         self.overlays.draw(self.screen)
         pygame.display.flip()
-
-    def walk(self, d):
-        if self.player.direction!=d:
-            self.player.turn(d)
-        else:
-            x,y = self.player.pos
-            if not self.level.is_blocking(int(x+DX[d]), int(y+DY[d])):
-                self.player.animation = self.player.walk_animation()
 
     def action(self):
         x, y = self.player.front()
@@ -428,13 +457,17 @@ class Game:
         if self.pressed_key == K_r:
             self.drop()
         if self.pressed_key == K_w:
-            self.walk(0)
+            self.player.walk(0,self.level)
         elif self.pressed_key == K_d:
-            self.walk(1)
+            self.player.walk(1,self.level)
         elif self.pressed_key == K_s:
-            self.walk(2)
+            self.player.walk(2,self.level)
         elif self.pressed_key == K_a:
-            self.walk(3)
+            self.player.walk(3,self.level)
+        elif self.pressed_key == K_g:
+            print (self.player.go_closest('crate'))
+        elif self.pressed_key == K_v:
+            print (self.player.movable)
         self.pressed_key=None
 
     def game_loop(self):
@@ -448,6 +481,7 @@ class Game:
             dirty = self.overlays.draw(self.screen)
             pygame.display.update(dirty)
             self.clock.tick(15)
+            self.player.vision(self.level)
             for event in pygame.event.get():
                 if event.type == pygame.locals.QUIT:
                     self.game_over = True
