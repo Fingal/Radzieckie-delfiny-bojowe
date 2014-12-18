@@ -1,38 +1,49 @@
 __author__ = 'Andrzej'
 import pygame
+from inputbox import Inputbox
 from pygame.locals import *
 import configparser
 from line import *
-
+from Exception import *
 
 def sup(a,b):
     return tuple(map(lambda x,y: x-y,a,b))
 
+def add(a,b):
+    return tuple(map(lambda x,y: x-y,a,b))
+
+
 def neigbours(pos):
     x,y = pos
     return {(x,y-1),(x-1,y),(x+1,y),(x,y+1)}
+
 def d(a,b):
     return list(zip(DX,DY)).index(sup(b,a))
+
+def distance(a,b):
+    x,y=sup(a,b)
+    return abs(x)+abs(y)
 
 class Graph:
     def __init__(self,points):
         self.graph={}
         for point in points:
             self.graph[point]=points & neigbours(point)
-    def find_shortest_path(self, start, end, path=[]):
-       path = path + [start]
-       if start == end:
-           return path
-       if  start not in self.graph:
-           return None
-       shortest = None
-       for node in self.graph[start]:
-           if node not in path:
-               newpath = self.find_shortest_path(node, end, path)
-               if newpath:
-                   if not shortest or len(newpath) < len(shortest):
-                       shortest = newpath
-       return shortest
+    def bfs_paths(self, start, goal):
+        queue = [(start, [start])]
+        while queue:
+            (vertex, path) = queue.pop(0)
+            for next in self.graph[vertex] - set(path):
+                if next == goal:
+                    yield path + [next]
+                else:
+                    queue.append((next, path + [next]))
+    def find_shortest_path(self, start, goal):
+        try:
+            return next(self.bfs_paths(start, goal))
+        except StopIteration:
+            return None
+
 class TileCache:
     """ładuje zestaw płytek"""
 
@@ -232,19 +243,36 @@ class Sprite(pygame.sprite.Sprite):
 
 class Player(Sprite):
     is_player = True
-
-    def __init__(self, pos=(0, 0)):
+    directions={
+        "gora":0,
+        "prawo":1,
+        "dol":2,
+        "lewo":3
+    }
+    def __init__(self, level, pos=(0, 0)):
         Sprite.__init__(self, pos, TileCache()["player.png"])
+        self.level=level
+        self.visible={}
+        self.items={}
+        self.memory=set()
         self.direction = 0
         self.image = self.frames[self.direction][0]
         self.animation = None
-    def walk(self, d,level):
+        self.action=False
+
+    def walk(self, d):
         if self.direction!=d:
             self.turn(d)
         else:
             x,y = self.pos
-            if not level.is_blocking(int(x+DX[d]), int(y+DY[d])):
+            x,y=int(x+DX[d]), int(y+DY[d])
+            if not self.level.is_blocking(x,y):
                 self.animation = self.walk_animation()
+                self.action = True
+            else:
+                self.memory= self.memory - {(x,y)}
+                raise Task_Failure("ścieźka jest zablokowana, zgubiłem się")
+
     def walk_animation(self):
         for frame in range(4):
             self.image = self.frames[self.direction][frame % 2]
@@ -253,8 +281,9 @@ class Player(Sprite):
             self.move(3*DX[self.direction],2*DY[self.direction])
 
     def turn(self,d):
-        self.direction=d
+        self.direction=d%4
         self.image=self.frames[self.direction][0]
+        self.vision()
 
     def front(self):
         return Level.front(self.pos,self.direction)
@@ -266,50 +295,92 @@ class Player(Sprite):
             try:
                 self.animation.__next__()
             except StopIteration:
+                self.action=False
                 self.animation = None
 
-    def vision(self,level):
+    def in_front(self,poses):
+        x,y =DX[self.direction],DY[self.direction]
+        if x==0:
+            return {item for item in poses if abs(item[0]-self.pos[0])<=1 and item[1]*y>self.pos[1]*y}
+        if y==0:
+            return {item for item in poses if abs(item[1]-self.pos[1])<=1 and item[0]*x>self.pos[0]*x}
+    def left(self,poses):
+        x,y =DX[self.direction],DY[self.direction]
+        if x==0:
+            return {item for item in poses if y*(item[0]-self.pos[0])>1}
+        if y==0:
+            return {item for item in poses if -x*(item[1]-self.pos[1])>1}
+    def right(self,poses):
+        x,y =DX[self.direction],DY[self.direction]
+        if x==0:
+            return {item for item in poses if -y*(item[0]-self.pos[0])>1}
+        if y==0:
+            return {item for item in poses if x*(item[1]-self.pos[1])>1}
+
+    def vision(self):
         self.visible={}
         set={self.pos}
 
         for a, b in vectors((2/3)*math.pi,24,self.direction-1):
+            self.visible={}
             line=Line(self.pos,a,b)
             point=line.next()
-            if level.get_tile(point[0],point[1])['name']!='floor':
-                    try:
-                        self.visible[level.get_tile(point[0],point[1])['name']].add(point)
-                    except KeyError:
-                        self.visible[level.get_tile(point[0],point[1])['name']]={point}
+            if self.level.get_tile(point[0],point[1])['name']!='floor':
+                try:
+                    self.visible[self.level.get_tile(point[0],point[1])['name']].add(point)
+                except KeyError:
+                    self.visible[self.level.get_tile(point[0],point[1])['name']]={point}
+                try:
+                    self.items[self.level.get_tile(point[0],point[1])['name']].add(point)
+                except KeyError:
+                    self.items[self.level.get_tile(point[0],point[1])['name']]={point}
 
-            while not level.is_blocking(point[0],point[1]):
+            while not self.level.is_blocking(point[0],point[1]):
                 set.add(point)
                 point=line.next()
                 try:
-                    if level.get_tile(point[0],point[1])['name']!='floor':
+                    if self.level.get_tile(point[0],point[1])['name']!='floor':
                         try:
-                            self.visible[level.get_tile(point[0],point[1])['name']].add(point)
+                            self.visible[self.level.get_tile(point[0],point[1])['name']].add(point)
                         except KeyError:
-                            self.visible[level.get_tile(point[0],point[1])['name']]={point}
+                            self.visible[self.level.get_tile(point[0],point[1])['name']]={point}
+                        try:
+                            self.items[self.level.get_tile(point[0],point[1])['name']].add(point)
+                        except KeyError:
+                            self.items[self.level.get_tile(point[0],point[1])['name']]={point}
                 except KeyError:
-                    print(level.get_tile(point[0],point[1]))
+                    pass
         #print(self.visible)
         self.movable=set
-        self.graph=Graph(self.movable)
+        self.memory=self.memory | self.movable
+        self.graph=Graph(self.memory)
 
     def go_to(self,point):
         if point not in self.movable:
-            raise IndexError
+            raise Task_Failure("Nie mogę znaleźć drogi do tego miejsca")
         return self.graph.find_shortest_path(self.pos,point)
 
-    def go_closest(self,name):
-        if name not in self.visible.keys():
-            raise IndexError
+    def go_closest(self,name,which='wszystkie'):
+        if which=="wszystkie":
+            visible=self.items
+        else:
+            visible=self.visible
+        if name not in visible.keys():
+            raise Task_Failure("Nie widzę niczego takiego")
         paths=[]
+        print(self.pos)
+        print(self.left(visible[name]))
         for pos in self.visible[name]:
-            for point in (neigbours(pos) & self.movable):
-                paths.append(self.graph.find_shortest_path(self.pos,point)+[pos])
-        paths = [x for x in paths if len(x)>1]
+            for point in (neigbours(pos) & self.memory):
+                if point==self.pos:
+                    return [pos]
+                try:
+                    paths.append(self.graph.find_shortest_path(self.pos,point)+[pos])
+                except TypeError:
+                    pass
         #print(paths)
+        if len(paths)==0:
+            raise Task_Failure("Nie mogę znaleźć ścieżki")
         return (min(paths,key=len))
 
     def comand_go(self,path):
@@ -318,17 +389,22 @@ class Player(Sprite):
             for start, end in zip(path[:-1],path[1:]):
                 moves+=[d(start,end)]
                 if len(moves)>=2 and moves[-1]!=moves[-2]:
-                    moves+=moves[-1]
+                    moves+=[moves[-1]]
+                elif len(moves)==1 and moves[0]!=self.direction:
+                    moves+=[moves[0]]
         return moves
-    def use(self,do,what,which='closest'):
+    def use(self,do,what,all,which='closest'):
         if which=='closest':
-            path=self.go_closest(what)
+            path=self.go_closest(what,all)
         else:
             path=[]
         moves=self.comand_go(path[:-1])
-        direction=d(path[-2],path[-1])
-        if direction!=moves[-1]:
-            moves.append(direction)
+        try:
+            direction=d(path[-2],path[-1])
+            if direction!=moves[-1]:
+                moves.append(direction)
+        except:
+            self.turn(d(self.pos,path[0]))
         moves.append('u')
         return moves
 
@@ -344,7 +420,7 @@ class Button(Sprite):
         pos = (pos[0],pos[1])
         Sprite.__init__(self, pos, TileCache()["button.png"])
         self.image = self.frames[0][0]
-        self.status=0;
+        self.status=0
         self.animation = None
     def touch(self,level):
         self.status=(self.status+1)%2
@@ -389,7 +465,8 @@ class Game:
         self.level.load_file('level.map')
         self.width = MAP_TILE_WIDTH*self.level.width
         self.height = MAP_TILE_HEIGHT*self.level.height
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.screen = pygame.display.set_mode((self.width, self.height+160))
+        self.inputbox=Inputbox(40,self.screen)
         self.special={}
         self.load_sprite()
         self.clock=pygame.time.Clock()
@@ -403,12 +480,13 @@ class Game:
             "weight": 0,
             "max_weight": 200
         }
+        self.waiting=True
     def load_sprite(self):
         sprite_cahe = TileCache(32, 32)
         self.sprites = SortedUpdates()
         for pos, tile in self.level.items.items():
             if tile.get("player") in ('true', '1', 'yes', 'on'):
-                sprite = Player(pos)
+                sprite = Player(self.level,pos)
                 self.player = sprite
             elif "special" in tile.keys():
                 print (tile['special'])
@@ -430,7 +508,6 @@ class Game:
                     sprite=Sprite(pos,sprite_cahe[tile["sprite"]])
                     self.items[pos]=Item(tile["name"],tile['weight'],sprite,self.level.get_tile_name(pos[0],pos[1]))
             else:
-                print (pos)
                 sprite = Sprite(pos, sprite_cahe[tile["sprite"]])
             self.sprites.add(sprite)
         print (self.special.keys())
@@ -452,11 +529,17 @@ class Game:
         if (x,y) in self.special.keys():
             for i in self.special[(x, y)]:
                 i.touch(self.level)
+
+    def pick(self):
+        x, y = self.player.front()
         if (x,y) in self.items.keys():
             self.items[(x,y)].pick()
+            self.player.items[self.items[(x,y)].name].remove((x,y))
             self.status["inventory"].append(self.items.pop((x,y)))
             self.level.set_tile(x,y,".")
             #print ("\n".join(self.level.map))
+        else:
+            raise Task_Failure("nie da sie tego podnieść")
 
     def drop(self):
         if len(self.status["inventory"])>0:
@@ -467,23 +550,47 @@ class Game:
                 droped.drop((x,y))
                 self.level.set_tile(x,y,droped.type)
                 #print ("\n".join(self.level.map))
-
+    def recognize(self,comands):
+        try:
+            if comands[0]=="wez":
+                do,what = comands[0:2]
+                try:
+                    which=comands[2]
+                except:
+                    which='wszystkie'
+                return self.player.use(do,what,which)
+            elif comands[0]=="idz":
+                self.player.turn(self.player.directions[comands[-1]])
+                return [self.player.directions[comands[-1]]]*int(comands[1])
+            elif comands[0]=="obrot":
+                if comands[1]=='prawo':
+                    self.player.turn(self.player.direction+1)
+                if comands[1]=='lewo':
+                    self.player.turn(self.player.direction-1)
+                if comands[1]=='tyl':
+                    self.player.turn(self.player.direction+2)
+            else:
+                self.inputbox.next("nie rozumiem")
+            return []
+        except Task_Failure as message:
+            self.inputbox.next(str(message))
+            return []
 
     def control(self):
-        if self.pressed_key == K_e:
-            self.action()
+        if self.pressed_key == 'u':
+            self.pick()
         if self.pressed_key == K_i:
             print (list(map(lambda i: i.name, self.status["inventory"])))
         if self.pressed_key == K_r:
             self.drop()
-        if self.pressed_key == K_w:
-            self.player.walk(0,self.level)
-        elif self.pressed_key == K_d:
-            self.player.walk(1,self.level)
-        elif self.pressed_key == K_s:
-            self.player.walk(2,self.level)
-        elif self.pressed_key == K_a:
-            self.player.walk(3,self.level)
+        if self.pressed_key == 0:
+            self.player.walk(0,)
+        elif self.pressed_key == 1:
+            self.player.walk(1,)
+        elif self.pressed_key == 2:
+            self.player.walk(2,)
+        elif self.pressed_key == 3:
+            self.player.walk(3,)
         elif self.pressed_key == K_g:
             print(self.player.go_closest('crate'))
             print(self.player.comand_go(self.player.go_closest('crate'))[:-1])
@@ -494,7 +601,14 @@ class Game:
 
     def game_loop(self):
         while not self.game_over:
-            self.control()
+            print(self.player.items)
+            try:
+                self.control()
+            except Task_Failure as a:
+                self.inputbox.next(str(a))
+                comands=[]
+                self.pressed_key=None
+            self.player.vision()
             self.sprites.clear(self.screen, self.background)
             dirty = self.sprites.draw(self.screen)
             self.sprites.update()
@@ -503,12 +617,21 @@ class Game:
             dirty = self.overlays.draw(self.screen)
             pygame.display.update(dirty)
             self.clock.tick(15)
-            self.player.vision(self.level)
-            for event in pygame.event.get():
+            if self.waiting:
+                comands=self.recognize(self.inputbox.main())
+                self.waiting=False
+                print(comands)
+            if not self.player.action and len(comands)==0:
+                self.waiting=True
+            """for event in pygame.event.get():
                 if event.type == pygame.locals.QUIT:
                     self.game_over = True
                 elif event.type == pygame.locals.KEYDOWN and self.player.animation == None:
-                    self.pressed_key = event.key
+                    self.pressed_key = event.key"""
+            if not self.player.action and len(comands)>0:
+                comand=comands[0]
+                comands=comands[1:]
+                self.pressed_key=comand
 if __name__=='__main__':
     game = Game()
     game.game_loop()

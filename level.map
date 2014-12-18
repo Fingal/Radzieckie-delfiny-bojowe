@@ -4,7 +4,7 @@ map = ........d...........
       .#####.##..#####.##.
       .#s#s#..#..#c#c#..#.
       .#..s####..#...#..#.
-      .b#.##.s#.p##d#.....
+      .b#.##.s#.p##d##....
       ...c....#......c.s..
       ...c....#.....c..s..
       ...c....#.......cs..
@@ -16,28 +16,28 @@ name = floor
 tile = 0, 3
 
 [b]
-name = button
+name = przycisk
 wall = true
 special = button	
 sprite = button
 block = true
 [d]
-name = door
+name = drzwi
 special = door	
 sprite = door
 open = 1,4
 block = true
 [#]
-name = wall
+name = mur
 wall = true
 block = true
 [s]
-name = skeleton
+name = szkielet
 tile = 0, 3
 block = true
 sprite = skeleton.png
 [c]
-name = crate
+name = skrzynia
 weight=100
 tile = 0, 3
 block = true
