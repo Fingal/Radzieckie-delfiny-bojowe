@@ -304,13 +304,13 @@ class Player(Sprite):
             return {item for item in poses if abs(item[0]-self.pos[0])<=1 and item[1]*y>self.pos[1]*y}
         if y==0:
             return {item for item in poses if abs(item[1]-self.pos[1])<=1 and item[0]*x>self.pos[0]*x}
-    def left(self,poses):
+    def in_left(self,poses):
         x,y =DX[self.direction],DY[self.direction]
         if x==0:
             return {item for item in poses if y*(item[0]-self.pos[0])>1}
         if y==0:
             return {item for item in poses if -x*(item[1]-self.pos[1])>1}
-    def right(self,poses):
+    def in_right(self,poses):
         x,y =DX[self.direction],DY[self.direction]
         if x==0:
             return {item for item in poses if -y*(item[0]-self.pos[0])>1}
@@ -322,7 +322,6 @@ class Player(Sprite):
         set={self.pos}
 
         for a, b in vectors((2/3)*math.pi,24,self.direction-1):
-            self.visible={}
             line=Line(self.pos,a,b)
             point=line.next()
             if self.level.get_tile(point[0],point[1])['name']!='floor':
@@ -367,10 +366,10 @@ class Player(Sprite):
             visible=self.visible
         if name not in visible.keys():
             raise Task_Failure("Nie widzę niczego takiego")
+        elif not visible[name]:
+            raise Task_Failure("Nie widzę niczego takiego")
         paths=[]
-        print(self.pos)
-        print(self.left(visible[name]))
-        for pos in self.visible[name]:
+        for pos in visible[name]:
             for point in (neigbours(pos) & self.memory):
                 if point==self.pos:
                     return [pos]
@@ -399,6 +398,8 @@ class Player(Sprite):
         else:
             path=[]
         moves=self.comand_go(path[:-1])
+        if do=='idz':
+            return moves
         try:
             direction=d(path[-2],path[-1])
             if direction!=moves[-1]:
@@ -407,6 +408,15 @@ class Player(Sprite):
             self.turn(d(self.pos,path[0]))
         moves.append('u')
         return moves
+    def go_straight(self,where,how_far):
+        x=self.directions[where]
+        if how_far==0:
+            point=[self.pos[0]+DX[x],self.pos[1]+DY[x]]
+            while not self.level.is_blocking(point[0],point[1]):
+                point=[point[0]+DX[x],point[1]+DY[x]]
+                how_far+=1
+        return [x]*int(how_far)
+
 
 class SortedUpdates(pygame.sprite.RenderUpdates):
 
@@ -489,7 +499,7 @@ class Game:
                 sprite = Player(self.level,pos)
                 self.player = sprite
             elif "special" in tile.keys():
-                print (tile['special'])
+                #print (tile['special'])
                 if tile['special'] in ('button'):
                     sprite = Button(pos)
                     if not pos in self.special.keys():
@@ -560,8 +570,15 @@ class Game:
                     which='wszystkie'
                 return self.player.use(do,what,which)
             elif comands[0]=="idz":
-                self.player.turn(self.player.directions[comands[-1]])
-                return [self.player.directions[comands[-1]]]*int(comands[1])
+                if comands[1]=='do':
+                    try:
+                        return self.player.use('idz',comands[2],comands[3])
+                    except IndexError:
+                        return self.player.use('idz',comands[2],'widoczne')
+                else:
+                    self.player.turn(self.player.directions[comands[-1]])
+                    where,how_far=comands[-1],int(comands[1])
+                    return self.player.go_straight(where,how_far)
             elif comands[0]=="obrot":
                 if comands[1]=='prawo':
                     self.player.turn(self.player.direction+1)
@@ -601,7 +618,7 @@ class Game:
 
     def game_loop(self):
         while not self.game_over:
-            print(self.player.items)
+            #print(self.player.items)
             try:
                 self.control()
             except Task_Failure as a:
@@ -620,7 +637,7 @@ class Game:
             if self.waiting:
                 comands=self.recognize(self.inputbox.main())
                 self.waiting=False
-                print(comands)
+                #print(comands)
             if not self.player.action and len(comands)==0:
                 self.waiting=True
             """for event in pygame.event.get():
