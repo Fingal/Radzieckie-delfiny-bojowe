@@ -16,6 +16,7 @@ import pygame, pygame.font, pygame.event, pygame.draw, string
 from pygame.locals import *
 class Inputbox:
   def __init__(self,line_length=10,screen=pygame.display.set_mode((360,640))):
+    self.bufor=[]
     self.value=False
     self.line_length=line_length
     #self.clock=pygame.time.Clock()
@@ -92,11 +93,16 @@ class Inputbox:
 
 
   def main(self):
-    result=self.ask("")
-    """while result != "exit":
+    try:
+      return self.bufor.pop(0)
+    except IndexError:
+      self.bufor=self.ask("").split(".")
+      self.bufor=list(filter(None,self.bufor))
+      self.bufor=[list(filter(None,x.split(" "))) for x in self.bufor]
+      """while result != "exit":
       self.next(result)
       result=self.ask("") """
-    return result.split(" ")
+      return self.bufor.pop(0)
 
 
 if __name__ == '__main__': Inputbox(50).main()

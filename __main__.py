@@ -280,6 +280,18 @@ class Player(Sprite):
             self.move(3*DX[self.direction],2*DY[self.direction])
             self.move(3*DX[self.direction],2*DY[self.direction])
 
+    def rotate(self, direction):
+        if direction=='prosto':
+            self.turn(self.direction)
+        elif direction=='prawo':
+            self.turn(self.direction+1)
+        elif direction=='tyl':
+            self.turn(self.direction+2)
+        elif direction=='lewo':
+            self.turn(self.direction+3)
+        else:
+            raise Task_Failure("Nieodpowiedni kierunek")
+
     def turn(self,d):
         self.direction=d%4
         self.image=self.frames[self.direction][0]
@@ -406,16 +418,18 @@ class Player(Sprite):
                 moves.append(direction)
         except:
             self.turn(d(self.pos,path[0]))
-        moves.append('u')
+        if do=='uzyj':
+            moves.append('a')
+        elif do=='wez':
+            moves.append('u')
         return moves
-    def go_straight(self,where,how_far):
-        x=self.directions[where]
+    def go_straight(self,how_far):
         if how_far==0:
-            point=[self.pos[0]+DX[x],self.pos[1]+DY[x]]
+            point=[self.pos[0]+DX[self.direction],self.pos[1]+DY[self.direction]]
             while not self.level.is_blocking(point[0],point[1]):
-                point=[point[0]+DX[x],point[1]+DY[x]]
+                point=[point[0]+DX[self.direction],point[1]+DY[self.direction]]
                 how_far+=1
-        return [x]*int(how_far)
+        return [self.direction]*int(how_far)
 
 
 class SortedUpdates(pygame.sprite.RenderUpdates):
@@ -551,15 +565,23 @@ class Game:
         else:
             raise Task_Failure("nie da sie tego podnieść")
 
-    def drop(self):
-        if len(self.status["inventory"])>0:
+    def drop(self,name):
+        droppable=[i for i in self.status["inventory"] if i.name==name]
+        #print(droppable)
+        if droppable:
             x, y = self.player.front()
             if not self.level.is_blocking(x,y):
-                droped=self.status["inventory"].pop(0)
-                self.items[(x,y)]=droped
-                droped.drop((x,y))
-                self.level.set_tile(x,y,droped.type)
+                dropped=droppable[0]
+                self.status["inventory"].remove(dropped)
+                self.items[(x,y)]=dropped
+                dropped.drop((x,y))
+                self.level.set_tile(x,y,dropped.type)
                 #print ("\n".join(self.level.map))
+            else:
+                raise Task_Failure("nie mogę tu odłożyć przedmiotu")
+        else:
+            raise Task_Failure("nie mam takiego przedmiotu")
+
     def recognize(self,comands):
         try:
             if comands[0]=="wez":
@@ -576,16 +598,21 @@ class Game:
                     except IndexError:
                         return self.player.use('idz',comands[2],'widoczne')
                 else:
-                    self.player.turn(self.player.directions[comands[-1]])
                     where,how_far=comands[-1],int(comands[1])
-                    return self.player.go_straight(where,how_far)
+                    self.player.rotate(where)
+                    return self.player.go_straight(how_far)
             elif comands[0]=="obrot":
-                if comands[1]=='prawo':
-                    self.player.turn(self.player.direction+1)
-                if comands[1]=='lewo':
-                    self.player.turn(self.player.direction-1)
-                if comands[1]=='tyl':
-                    self.player.turn(self.player.direction+2)
+                self.player.rotate(comands[1])
+            elif comands[0]=="odloz":
+                try:
+                    self.drop(comands[1])
+                except KeyError:
+                    raise Task_Failure("nie mam tego w ekwipunku")
+            elif comands[0]=="uzyj":
+                try:
+                    return self.player.use('uzyj',comands[1],comands[2])
+                except IndexError:
+                    return self.player.use('uzyj',comands[1],'widoczne')
             else:
                 self.inputbox.next("nie rozumiem")
             return []
@@ -596,10 +623,10 @@ class Game:
     def control(self):
         if self.pressed_key == 'u':
             self.pick()
+        if self.pressed_key == 'a':
+            self.action()
         if self.pressed_key == K_i:
             print (list(map(lambda i: i.name, self.status["inventory"])))
-        if self.pressed_key == K_r:
-            self.drop()
         if self.pressed_key == 0:
             self.player.walk(0,)
         elif self.pressed_key == 1:
