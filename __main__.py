@@ -244,10 +244,10 @@ class Sprite(pygame.sprite.Sprite):
 class Player(Sprite):
     is_player = True
     directions={
-        "gora":0,
-        "prawo":1,
-        "dol":2,
-        "lewo":3
+        "polnoc":0,
+        "wschod":1,
+        "polodnie":2,
+        "zachod":3
     }
     def __init__(self, level, pos=(0, 0)):
         Sprite.__init__(self, pos, TileCache()["player.png"])
@@ -281,16 +281,19 @@ class Player(Sprite):
             self.move(3*DX[self.direction],2*DY[self.direction])
 
     def rotate(self, direction):
-        if direction=='prosto':
-            self.turn(self.direction)
-        elif direction=='prawo':
-            self.turn(self.direction+1)
-        elif direction=='tyl':
-            self.turn(self.direction+2)
-        elif direction=='lewo':
-            self.turn(self.direction+3)
-        else:
-            raise Task_Failure("Nieodpowiedni kierunek")
+        try:
+            self.turn(self.directions[direction])
+        except KeyError:
+            if direction=='prosto':
+                self.turn(self.direction)
+            elif direction=='prawo':
+                self.turn(self.direction+1)
+            elif direction=='tyl':
+                self.turn(self.direction+2)
+            elif direction=='lewo':
+                self.turn(self.direction+3)
+            else:
+                raise Task_Failure("Nieodpowiedni kierunek")
 
     def turn(self,d):
         self.direction=d%4
